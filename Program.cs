@@ -1,8 +1,12 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
-using Newtonsoft.Json;
+using System.Text.Json;
+using static System.Net.Mime.MediaTypeNames;
 
 var app = WebApplication.Create();
+app.UseStaticFiles();
+app.UseRouting();
 
 app.MapGet("/", (HttpContext context) =>
 {
@@ -100,7 +104,7 @@ app.MapPost("/image", async (HttpContext context) =>
     }
 
     var imageId = Guid.NewGuid().ToString();
-    var imagePath = Path.Combine("Data", $"{imageId}{Path.GetExtension(file.FileName)}");
+    var imagePath = Path.Combine("pictures", $"{imageId}{Path.GetExtension(file.FileName)}");
     using (var fileStream = new FileStream(imagePath, FileMode.Create))
     {
         await file.CopyToAsync(fileStream);
@@ -109,13 +113,13 @@ app.MapPost("/image", async (HttpContext context) =>
     var imageDetails = new
     {
         Id = imageId,
-        Title = title,
+        Title = title.ToString(),
         FileName = file.FileName,
         FileExtension = fileExtension
     };
 
-    var jsonData = JsonConvert.SerializeObject(imageDetails);
-    var jsonPath = "Data/data.json";
+    var jsonData = JsonSerializer.Serialize(imageDetails);
+    var jsonPath = "pictures/data.json";
     if (File.Exists(jsonPath))
     {
         File.Delete(jsonPath);
@@ -131,10 +135,12 @@ app.MapPost("/image", async (HttpContext context) =>
 app.MapGet("/pictures/{id}", async (HttpContext context) =>
 {
     var id = context.Request.RouteValues["id"].ToString();
-    var jsonData = File.ReadAllText("Data/data.json");
-    var imageDetails = JsonConvert.DeserializeObject<dynamic>(jsonData);
+    var jsonData = File.ReadAllText("pictures/data.json");
+    var root = getRoot(jsonData);
+    string imageId = root.GetProperty("Id").GetString();
+    string title = root.GetProperty("Title").GetString();
 
-    if (imageDetails == null || imageDetails.Id != id)
+    if (imageId != id)
     {
         context.Response.StatusCode = 404;
         await context.Response.WriteAsync("Image not found.");
@@ -142,20 +148,86 @@ app.MapGet("/pictures/{id}", async (HttpContext context) =>
     }
 
     context.Response.ContentType = "text/html";
-    var title = imageDetails.Title.ToString().Trim('[', ']');
-    title = title.Replace("\"", "");
-    var imageUrl = $"/Data/{imageDetails.Id}{imageDetails.FileExtension}";
-
     var htmlContent = $@"
+        <!DOCTYPE html>
         <html>
+        <head>
+            <title>{title}</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    background-color: #f8f8f8;
+                    margin: 0;
+                    padding: 20px;
+                }}
+
+                h1 {{
+                    text-align: center;
+                    color: #333;
+                }}
+
+                .image-container {{
+                    text-align: center;
+                    margin-top: 20px;
+                }}
+
+                .image-container img {{
+                    max-width: 100%;
+                    height: auto;
+                }}
+
+                .button-container {{
+                    text-align: center;
+                    margin-top: 20px;
+                }}
+
+                .button-container button {{
+                    padding: 10px 20px;
+                    font-size: 16px;
+                    background-color: #333;
+                    color: #fff;
+                    border: none;
+                    cursor: pointer;
+                }}
+            </style>
+            </head>
             <body>
                 <h1>{title}</h1>
-                <img src={imageUrl} alt='{title}' />
+                <div class='image-container'>
+                    <img src='/storeImage' alt='{title}' />
+                </div>
+                <div class='button-container'>
+                    <button onclick='redirectBack()'>Upload Again!</button>
+                </div>
+                <script>
+                    function redirectBack() {{
+                        window.location.href = '/';
+                    }}
+                </script>
             </body>
-        </html>
-    ";
-
+            </html>
+";
     await context.Response.WriteAsync(htmlContent);
 });
+
+app.MapGet("/storeImage", async (HttpContext context) =>
+{
+    var jsonData = File.ReadAllText("pictures/data.json");
+    var root = getRoot(jsonData.ToString());
+    string imageId = root.GetProperty("Id").GetString();
+    string fileExtension = root.GetProperty("FileExtension").GetString();
+
+
+    string imagePath = $"./pictures/{imageId}{fileExtension}";
+    context.Response.ContentType = "image/jpeg";
+    await context.Response.SendFileAsync(imagePath);
+});
+
+JsonElement getRoot(string jsonData)
+{
+    JsonDocument document = JsonDocument.Parse(jsonData);
+    JsonElement root = document.RootElement;
+    return root;
+}
 
 app.Run();
