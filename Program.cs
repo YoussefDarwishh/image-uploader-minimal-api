@@ -4,8 +4,6 @@ using Microsoft.AspNetCore.Http;
 using System.Text.Json;
 
 var app = WebApplication.Create();
-app.UseStaticFiles();
-app.UseRouting();
 
 app.MapGet("/", (HttpContext context) =>
 {
