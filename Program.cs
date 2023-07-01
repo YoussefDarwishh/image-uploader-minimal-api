@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
 using System.Text.Json;
-using static System.Net.Mime.MediaTypeNames;
 
 var app = WebApplication.Create();
 app.UseStaticFiles();
