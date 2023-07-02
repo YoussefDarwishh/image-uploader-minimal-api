@@ -5,13 +5,13 @@ using System.Text.Json;
 
 var app = WebApplication.Create();
 
-app.MapGet("/", (HttpContext context) =>
+app.MapGet("/", () =>
 {
-    context.Response.ContentType = "text/html";
-    string htmlContent = @"
+    return Results.Content(@"
                     <!DOCTYPE html>
                     <html>
                     <head>
+                        <title>Image Uploader</title>
                         <style>
                             body {
                                 font-family: Arial, sans-serif;
@@ -74,30 +74,24 @@ app.MapGet("/", (HttpContext context) =>
                         </div>
                     </body>
                     </html>
-            ";
-
-     return context.Response.WriteAsync(htmlContent);
+            ", "text/html");
 });
 
-app.MapPost("/image", async (HttpContext context) =>
+app.MapPost("/image", async (HttpRequest request) =>
 {
-    var form = await context.Request.ReadFormAsync();
+    var form = await request.ReadFormAsync();
     var title = form["imageTitle"];
     var file = form.Files.GetFile("imageFile");
     var fileExtension = Path.GetExtension(file.FileName).ToLower();
 
     if (string.IsNullOrEmpty(title) || file == null || file.Length == 0)
     {
-        context.Response.StatusCode = 400;
-        await context.Response.WriteAsync("Invalid request. Title and image file are required.");
-        return;
+        return Results.BadRequest("Invalid request. Title and image file are required.");
     }
 
     if (fileExtension != ".jpeg" && fileExtension != ".gif" && fileExtension != ".png")
     {
-        context.Response.StatusCode = 400;
-        await context.Response.WriteAsync("Invalid file format. Only .jpeg, .png, and .gif are supported.");
-        return;
+        return Results.BadRequest("Invalid file format. Only .jpeg, .png, and .gif are supported.");
     }
 
     var imageId = Guid.NewGuid().ToString();
@@ -125,13 +119,12 @@ app.MapPost("/image", async (HttpContext context) =>
 
 
     var redirectUrl = $@"/pictures/{imageId}";
-    context.Response.Redirect(redirectUrl);
+    return Results.Redirect(redirectUrl);
 });
 
 
-app.MapGet("/pictures/{id}", async (HttpContext context) =>
+app.MapGet("/pictures/{id}", (string id) =>
 {
-    var id = context.Request.RouteValues["id"].ToString();
     var jsonData = File.ReadAllText("pictures/data.json");
     var root = getRoot(jsonData);
     string imageId = root.GetProperty("Id").GetString();
@@ -139,12 +132,9 @@ app.MapGet("/pictures/{id}", async (HttpContext context) =>
 
     if (imageId != id)
     {
-        context.Response.StatusCode = 404;
-        await context.Response.WriteAsync("Image not found.");
-        return;
+        return Results.NotFound("Image not found");
     }
 
-    context.Response.ContentType = "text/html";
     var htmlContent = $@"
         <!DOCTYPE html>
         <html>
@@ -191,7 +181,7 @@ app.MapGet("/pictures/{id}", async (HttpContext context) =>
             <body>
                 <h1>{title}</h1>
                 <div class='image-container'>
-                    <img src='/storeImage' alt='{title}' />
+                    <img src='/store-image' alt='{title}' />
                 </div>
                 <div class='button-container'>
                     <button onclick='redirectBack()'>Upload Again!</button>
@@ -204,20 +194,18 @@ app.MapGet("/pictures/{id}", async (HttpContext context) =>
             </body>
             </html>
 ";
-    await context.Response.WriteAsync(htmlContent);
+    return Results.Content(htmlContent, "text/html");
 });
 
-app.MapGet("/storeImage", async (HttpContext context) =>
+app.MapGet("/store-image", () =>
 {
     var jsonData = File.ReadAllText("pictures/data.json");
     var root = getRoot(jsonData.ToString());
     string imageId = root.GetProperty("Id").GetString();
     string fileExtension = root.GetProperty("FileExtension").GetString();
+    string imagePath = Path.Combine(Directory.GetCurrentDirectory(), "pictures", $"{imageId}{fileExtension}");
 
-
-    string imagePath = $"./pictures/{imageId}{fileExtension}";
-    context.Response.ContentType = "image/jpeg";
-    await context.Response.SendFileAsync(imagePath);
+    return Results.File(imagePath, "image/jpeg");
 });
 
 JsonElement getRoot(string jsonData)
