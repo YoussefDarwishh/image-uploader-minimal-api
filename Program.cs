@@ -115,7 +115,7 @@ app.MapPost("/image", async (HttpRequest request) =>
     {
         File.Delete(jsonPath);
     }
-    File.AppendAllText(jsonPath, $"{jsonData}{Environment.NewLine}");
+   await File.WriteAllTextAsync(jsonPath, $"{jsonData}{Environment.NewLine}");
 
 
     var redirectUrl = $@"/pictures/{imageId}";
